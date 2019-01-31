@@ -53,8 +53,9 @@ stop(PoolName) ->
   supervisor:delete_child(eap_sup, PoolName).
 
 %
-cast(PoolName, Msg) ->
+cast(Msg, PoolName) when is_atom(PoolName) ->
   case eap_pool_server:get_worker(PoolName) of
     {ok, Pid} -> gen_server:cast(Pid, Msg);
     Else -> Else
-  end.
+  end;
+cast(_,_) -> ?e(wrong_pool_name).
