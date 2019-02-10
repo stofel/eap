@@ -3,6 +3,7 @@
 -export([start/1, stop/1]).
 
 -export([cast/2]).
+-export([list/0, stat/0, stat/1]).
 
 
 -include("../include/eap.hrl").
@@ -56,6 +57,17 @@ stop(PoolName) ->
 cast(Msg, PoolName) when is_atom(PoolName) ->
   case eap_pool_server:get_worker(PoolName) of
     {ok, Pid} -> gen_server:cast(Pid, Msg);
-    Else -> Else
+    Else -> 
+      ?INF("Else", Else),
+      Else
   end;
 cast(_,_) -> ?e(wrong_pool_name).
+
+
+
+
+list() ->
+  [element(1, C) || C <- supervisor:which_children(eap_sup)].
+
+stat() -> list().
+stat(Pool) -> gen_server:call(Pool, stat).

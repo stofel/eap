@@ -29,7 +29,8 @@ start_link(PoolName) ->
 init([]) ->
   process_flag(trap_exit, true),
   State = #{
-      idle => []  %% Idle worker pids
+      idle => [],  %% Idle worker pids for checkout
+      rest => []   %% Chekined worker pids
     },
   {ok, State}.
 
@@ -63,13 +64,17 @@ handle_call(_Req, _From, S)        -> {reply, ?e(unknown_command), S}.
 
 
 %%
-checkout(PoolName, Pid)           -> gen_server:cast(PoolName, {checkout, Pid}).
-checkout_(S = #{idle := I}, Pid)  -> {noreply, S#{idle := lists:delete(Pid, I)}}.
+checkout(PoolName, Pid)             -> gen_server:cast(PoolName, {checkout, Pid}).
+checkout_(S = #{idle := Pids}, Pid) -> {noreply, S#{idle := lists:delete(Pid, Pids)}}.
 
 
 %%
 checkin(PoolName, Pid)            -> gen_server:cast(PoolName, {checkin, Pid}).
-checkin_(S = #{idle := I}, Pid)   -> {noreply, S#{idle := lists:usort([Pid|I])}}.
+checkin_(S = #{rest := R}, Pid)   -> 
+  case lists:member(Pid, R) of
+    false -> {noreply, S#{rest := [Pid|R]}};
+    true  -> {noreply, S}
+  end.
 
 
 %%
@@ -78,14 +83,15 @@ start_worker_(S = #{idle := I}, Pid)  -> erlang:monitor(process, Pid), {noreply,
 
 
 %%
-get_worker(PoolName)              -> gen_server:call(PoolName, get_worker).
-get_worker_(S = #{idle := [W|_]}) -> {reply, {ok, W}, S};
-get_worker_(S = #{idle := []})    -> {reply, ?e(no_idle_worker_exists), S}.
+get_worker(PoolName)                               -> gen_server:call(PoolName, get_worker).
+get_worker_(S = #{idle := [Pid|_Pids]})            -> {reply, {ok, Pid}, S};
+get_worker_(S = #{idle := [], rest := [Pid|Pids]}) -> {reply, {ok, Pid}, S#{idle := [Pid|Pids], rest := []}};
+get_worker_(S)                                     -> {reply, ?e(no_idle_worker_exists), S}.
 
 
 %%
-stat(PoolName)                    -> gen_server:call(PoolName, get_stat).
-stat_(S = #{idle := Workers})     -> {reply, #{idle_workers_num => length(Workers)}, S}.
+stat(PoolName)                    -> gen_server:call(PoolName, stat).
+stat_(S = #{idle := W1, rest := W2})     -> {reply, #{workers_num => {length(W1), length(W2)}}, S}.
 
 
 %%
